@@ -1,11 +1,17 @@
 import sys
 import requests
-from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QPushButton, QWidget, QVBoxLayout
+from PyQt6.QtWidgets import (
+    QApplication, QLabel, QMainWindow,
+    QPushButton, QWidget, QVBoxLayout,
+    QLineEdit, QHBoxLayout
+)
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 
 API_KEY = "f3a0fe3a-b07e-4840-a1da-06f18b2ddf13"
-SERVER = "https://static-maps.yandex.ru/v1?"
+GEOCODER_API_KEY = "8013b162-6b42-4997-9691-77b7074026e0"
+STATIC_SERVER = "https://static-maps.yandex.ru/v1?"
+GEOCODER_SERVER = "https://geocode-maps.yandex.ru/1.x/"
 
 MIN_SPN = 0.0005
 MAX_SPN = 50
@@ -15,51 +21,82 @@ ZOOM_STEP = 2
 class MapWindow(QMainWindow):
     def __init__(self, lon, lat, spn):
         super().__init__()
-
         self.lon = float(lon)
         self.lat = float(lat)
         self.spn = float(spn)
-        self.theme = "light"  # по умолчанию светлая тема
-
+        self.theme = "light"
+        self.marker = None
         self.setWindowTitle("Map")
-        self.setFixedSize(650, 500)
-
-        # Центральный виджет
+        self.setFixedSize(650, 600)
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-
-        layout = QVBoxLayout()
-        central_widget.setLayout(layout)
-
-        # Карта
+        main_layout = QVBoxLayout()
+        central_widget.setLayout(main_layout)
+        search_layout = QHBoxLayout()
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Введите адрес или объект...")
+        self.search_input.returnPressed.connect(self.search_object)
+        self.search_button = QPushButton("Искать")
+        self.search_button.clicked.connect(self.search_object)
+        search_layout.addWidget(self.search_input)
+        search_layout.addWidget(self.search_button)
+        main_layout.addLayout(search_layout)
         self.label = QLabel()
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.label)
-
+        main_layout.addWidget(self.label)
         self.theme_button = QPushButton("Переключить тему")
         self.theme_button.clicked.connect(self.toggle_theme)
-        layout.addWidget(self.theme_button)
-
+        main_layout.addWidget(self.theme_button)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.load_map()
 
-    def build_url(self):
-        return (
-            f"{SERVER}ll={self.lon},{self.lat}"
+    def build_map_url(self):
+        url = (
+            f"{STATIC_SERVER}ll={self.lon},{self.lat}"
             f"&spn={self.spn},{self.spn}"
             f"&l=map"
             f"&theme={self.theme}"
             f"&apikey={API_KEY}"
         )
+        if self.marker:
+            url += f"&pt={self.marker},pm2rdm"
+        return url
 
     def load_map(self):
-        response = requests.get(self.build_url())
+        response = requests.get(self.build_map_url())
         if not response.ok:
-            print("Ошибка запроса:", response.status_code)
+            print("Ошибка карты:", response.status_code)
             return
         pixmap = QPixmap()
         pixmap.loadFromData(response.content)
         self.label.setPixmap(pixmap)
+
+    def search_object(self):
+        query = self.search_input.text()
+        if not query:
+            return
+        params = {
+            "apikey": GEOCODER_API_KEY,
+            "geocode": query,
+            "format": "json",
+            "lang": "ru_RU"
+        }
+        response = requests.get(GEOCODER_SERVER, params=params)
+        if response.status_code != 200:
+            print("Ошибка геокодера:", response.status_code)
+            print(response.text)
+            return
+        data = response.json()
+        try:
+            pos = data["response"]["GeoObjectCollection"] \
+                ["featureMember"][0]["GeoObject"]["Point"]["pos"]
+            lon, lat = pos.split()
+            self.lon = float(lon)
+            self.lat = float(lat)
+            self.marker = f"{lon},{lat}"
+            self.load_map()
+        except (IndexError, KeyError):
+            print("Объект не найден")
 
     def toggle_theme(self):
         if self.theme == "light":
@@ -92,11 +129,9 @@ def main():
         print("Использование:")
         print("python main.py <lon> <lat> <spn>")
         sys.exit(1)
-
     lon = sys.argv[1]
     lat = sys.argv[2]
     spn = float(sys.argv[3])
-
     app = QApplication(sys.argv)
     window = MapWindow(lon, lat, spn)
     window.show()
