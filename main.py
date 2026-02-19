@@ -68,7 +68,6 @@ class MapWindow(QMainWindow):
         zoom_layout.addWidget(self.zoom_in_button)
         zoom_layout.addWidget(self.zoom_out_button)
         main_layout.addLayout(zoom_layout)
-
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.load_map()
 
