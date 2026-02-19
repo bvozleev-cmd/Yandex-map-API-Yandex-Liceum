@@ -37,8 +37,11 @@ class MapWindow(QMainWindow):
         self.search_input.returnPressed.connect(self.search_object)
         self.search_button = QPushButton("Искать")
         self.search_button.clicked.connect(self.search_object)
+        self.reset_button = QPushButton("Сброс поискового результата")
+        self.reset_button.clicked.connect(self.reset_last_marker)
         search_layout.addWidget(self.search_input)
         search_layout.addWidget(self.search_button)
+        search_layout.addWidget(self.reset_button)
         main_layout.addLayout(search_layout)
         self.label = QLabel()
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -88,7 +91,6 @@ class MapWindow(QMainWindow):
             print(response.text)
             return
         data = response.json()
-
         try:
             pos = data["response"]["GeoObjectCollection"] \
                 ["featureMember"][0]["GeoObject"]["Point"]["pos"]
@@ -99,6 +101,11 @@ class MapWindow(QMainWindow):
             self.load_map()
         except (IndexError, KeyError):
             print("Объект не найден")
+
+    def reset_last_marker(self):
+        if self.markers:
+            self.markers.pop()
+            self.load_map()
 
     def toggle_theme(self):
         self.theme = "dark" if self.theme == "light" else "light"
