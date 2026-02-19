@@ -25,6 +25,9 @@ class MapWindow(QMainWindow):
         self.spn = float(spn)
         self.theme = "light"
         self.markers = []
+        self.show_postcode = True
+        self.current_address = ""
+        self.current_postcode = ""
         self.setWindowTitle("Map")
         self.setFixedSize(650, 700)
         central_widget = QWidget()
@@ -43,6 +46,9 @@ class MapWindow(QMainWindow):
         self.reset_button = QPushButton("Сброс поискового результата")
         self.reset_button.clicked.connect(self.reset_last_marker)
         main_layout.addWidget(self.reset_button)
+        self.postcode_button = QPushButton("Включить/выключить индекс")
+        self.postcode_button.clicked.connect(self.toggle_postcode)
+        main_layout.addWidget(self.postcode_button)
         self.address_label = QLabel("Адрес будет показан здесь")
         self.address_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.address_label.setWordWrap(True)
@@ -62,6 +68,7 @@ class MapWindow(QMainWindow):
         zoom_layout.addWidget(self.zoom_in_button)
         zoom_layout.addWidget(self.zoom_out_button)
         main_layout.addLayout(zoom_layout)
+
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.load_map()
 
@@ -88,6 +95,12 @@ class MapWindow(QMainWindow):
         pixmap.loadFromData(response.content)
         self.label.setPixmap(pixmap)
 
+    def update_address_label(self):
+        if self.show_postcode and self.current_postcode:
+            self.address_label.setText(f"{self.current_address}, {self.current_postcode}")
+        else:
+            self.address_label.setText(self.current_address)
+
     def search_object(self):
         query = self.search_input.text()
         if not query:
@@ -110,8 +123,10 @@ class MapWindow(QMainWindow):
             self.lon = float(lon)
             self.lat = float(lat)
             self.markers.append(f"{lon},{lat}")
-            address = geo_obj["metaDataProperty"]["GeocoderMetaData"]["text"]
-            self.address_label.setText(address)
+            meta = geo_obj["metaDataProperty"]["GeocoderMetaData"]
+            self.current_address = meta["text"]
+            self.current_postcode = meta.get("Address", {}).get("postal_code", "")
+            self.update_address_label()
             self.load_map()
         except (IndexError, KeyError):
             self.address_label.setText("Объект не найден")
@@ -120,12 +135,18 @@ class MapWindow(QMainWindow):
     def reset_last_marker(self):
         if self.markers:
             self.markers.pop()
+        self.current_address = ""
+        self.current_postcode = ""
         self.address_label.setText("Адрес будет показан здесь")
         self.load_map()
 
     def toggle_theme(self):
         self.theme = "dark" if self.theme == "light" else "light"
         self.load_map()
+
+    def toggle_postcode(self):
+        self.show_postcode = not self.show_postcode
+        self.update_address_label()
 
     def zoom_in(self):
         self.spn = max(self.spn / ZOOM_STEP, MIN_SPN)
