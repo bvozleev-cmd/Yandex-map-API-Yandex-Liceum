@@ -106,6 +106,7 @@ class MapWindow(QMainWindow):
             print("Ошибка карты:", response.status_code)
             print(response.text)
             return
+
         pixmap = QPixmap()
         pixmap.loadFromData(response.content)
         self.label.setPixmap(pixmap)
