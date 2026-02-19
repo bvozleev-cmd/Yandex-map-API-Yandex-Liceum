@@ -26,7 +26,7 @@ class MapWindow(QMainWindow):
         self.theme = "light"
         self.markers = []
         self.setWindowTitle("Map")
-        self.setFixedSize(650, 600)
+        self.setFixedSize(650, 700)
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout()
@@ -37,18 +37,31 @@ class MapWindow(QMainWindow):
         self.search_input.returnPressed.connect(self.search_object)
         self.search_button = QPushButton("Искать")
         self.search_button.clicked.connect(self.search_object)
-        self.reset_button = QPushButton("Сброс поискового результата")
-        self.reset_button.clicked.connect(self.reset_last_marker)
         search_layout.addWidget(self.search_input)
         search_layout.addWidget(self.search_button)
-        search_layout.addWidget(self.reset_button)
         main_layout.addLayout(search_layout)
+        self.reset_button = QPushButton("Сброс поискового результата")
+        self.reset_button.clicked.connect(self.reset_last_marker)
+        main_layout.addWidget(self.reset_button)
+        self.address_label = QLabel("Адрес будет показан здесь")
+        self.address_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.address_label.setWordWrap(True)
+        self.address_label.setFixedHeight(40)
+        main_layout.addWidget(self.address_label)
         self.label = QLabel()
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(self.label)
         self.theme_button = QPushButton("Переключить тему")
         self.theme_button.clicked.connect(self.toggle_theme)
         main_layout.addWidget(self.theme_button)
+        zoom_layout = QHBoxLayout()
+        self.zoom_in_button = QPushButton("+")
+        self.zoom_in_button.clicked.connect(self.zoom_in)
+        self.zoom_out_button = QPushButton("-")
+        self.zoom_out_button.clicked.connect(self.zoom_out)
+        zoom_layout.addWidget(self.zoom_in_button)
+        zoom_layout.addWidget(self.zoom_out_button)
+        main_layout.addLayout(zoom_layout)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.load_map()
 
@@ -88,35 +101,46 @@ class MapWindow(QMainWindow):
         response = requests.get(GEOCODER_SERVER, params=params)
         if response.status_code != 200:
             print("Ошибка геокодера:", response.status_code)
-            print(response.text)
             return
         data = response.json()
         try:
-            pos = data["response"]["GeoObjectCollection"] \
-                ["featureMember"][0]["GeoObject"]["Point"]["pos"]
+            geo_obj = data["response"]["GeoObjectCollection"]["featureMember"][0]["GeoObject"]
+            pos = geo_obj["Point"]["pos"]
             lon, lat = pos.split()
             self.lon = float(lon)
             self.lat = float(lat)
             self.markers.append(f"{lon},{lat}")
+            address = geo_obj["metaDataProperty"]["GeocoderMetaData"]["text"]
+            self.address_label.setText(address)
             self.load_map()
         except (IndexError, KeyError):
+            self.address_label.setText("Объект не найден")
             print("Объект не найден")
 
     def reset_last_marker(self):
         if self.markers:
             self.markers.pop()
-            self.load_map()
+        self.address_label.setText("Адрес будет показан здесь")
+        self.load_map()
 
     def toggle_theme(self):
         self.theme = "dark" if self.theme == "light" else "light"
         self.load_map()
 
+    def zoom_in(self):
+        self.spn = max(self.spn / ZOOM_STEP, MIN_SPN)
+        self.load_map()
+
+    def zoom_out(self):
+        self.spn = min(self.spn * ZOOM_STEP, MAX_SPN)
+        self.load_map()
+
     def keyPressEvent(self, event):
         step = self.spn / 2
         if event.key() == Qt.Key.Key_PageUp:
-            self.spn = max(self.spn / ZOOM_STEP, MIN_SPN)
+            self.zoom_in()
         elif event.key() == Qt.Key.Key_PageDown:
-            self.spn = min(self.spn * ZOOM_STEP, MAX_SPN)
+            self.zoom_out()
         elif event.key() == Qt.Key.Key_Up:
             self.lat = min(self.lat + step, 85)
         elif event.key() == Qt.Key.Key_Down:
