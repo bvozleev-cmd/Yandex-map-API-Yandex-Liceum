@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QWidget, QVBoxLayout,
     QLineEdit, QHBoxLayout
 )
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QMouseEvent
 from PyQt6.QtCore import Qt
 
 API_KEY = "f3a0fe3a-b07e-4840-a1da-06f18b2ddf13"
@@ -15,6 +15,20 @@ GEOCODER_SERVER = "https://geocode-maps.yandex.ru/1.x/"
 MIN_SPN = 0.0005
 MAX_SPN = 50
 ZOOM_STEP = 2
+MAP_WIDTH = 650
+MAP_HEIGHT = 500
+
+
+class MapLabel(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.click_callback = None
+
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton and self.click_callback:
+            x = event.position().x()
+            y = event.position().y()
+            self.click_callback(x, y)
 
 
 class MapWindow(QMainWindow):
@@ -54,8 +68,10 @@ class MapWindow(QMainWindow):
         self.address_label.setWordWrap(True)
         self.address_label.setFixedHeight(40)
         main_layout.addWidget(self.address_label)
-        self.label = QLabel()
+        self.label = MapLabel()
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setFixedSize(MAP_WIDTH, MAP_HEIGHT)
+        self.label.click_callback = self.click_on_map
         main_layout.addWidget(self.label)
         self.theme_button = QPushButton("Переключить тему")
         self.theme_button.clicked.connect(self.toggle_theme)
@@ -122,6 +138,35 @@ class MapWindow(QMainWindow):
             self.lon = float(lon)
             self.lat = float(lat)
             self.markers.append(f"{lon},{lat}")
+            meta = geo_obj["metaDataProperty"]["GeocoderMetaData"]
+            self.current_address = meta["text"]
+            self.current_postcode = meta.get("Address", {}).get("postal_code", "")
+            self.update_address_label()
+            self.load_map()
+        except (IndexError, KeyError):
+            self.address_label.setText("Объект не найден")
+            print("Объект не найден")
+
+    def click_on_map(self, x, y):
+        lon = self.lon + (x - MAP_WIDTH / 2) * self.spn / MAP_WIDTH
+        lat = self.lat - (y - MAP_HEIGHT / 2) * self.spn / MAP_HEIGHT
+        query = f"{lon},{lat}"
+        params = {
+            "apikey": GEOCODER_API_KEY,
+            "geocode": query,
+            "format": "json",
+            "lang": "ru_RU"
+        }
+        response = requests.get(GEOCODER_SERVER, params=params)
+        if response.status_code != 200:
+            print("Ошибка геокодера:", response.status_code)
+            return
+        data = response.json()
+        try:
+            geo_obj = data["response"]["GeoObjectCollection"]["featureMember"][0]["GeoObject"]
+            pos = geo_obj["Point"]["pos"]
+            lon, lat = pos.split()
+            self.markers.append(f"{lon},{lat}")  # метка добавляется
             meta = geo_obj["metaDataProperty"]["GeocoderMetaData"]
             self.current_address = meta["text"]
             self.current_postcode = meta.get("Address", {}).get("postal_code", "")
