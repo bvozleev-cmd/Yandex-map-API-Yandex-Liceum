@@ -12,7 +12,6 @@ API_KEY = "f3a0fe3a-b07e-4840-a1da-06f18b2ddf13"
 GEOCODER_API_KEY = "8013b162-6b42-4997-9691-77b7074026e0"
 STATIC_SERVER = "https://static-maps.yandex.ru/v1?"
 GEOCODER_SERVER = "https://geocode-maps.yandex.ru/1.x/"
-
 MIN_SPN = 0.0005
 MAX_SPN = 50
 ZOOM_STEP = 2
@@ -25,7 +24,7 @@ class MapWindow(QMainWindow):
         self.lat = float(lat)
         self.spn = float(spn)
         self.theme = "light"
-        self.marker = None
+        self.markers = []
         self.setWindowTitle("Map")
         self.setFixedSize(650, 600)
         central_widget = QWidget()
@@ -58,14 +57,16 @@ class MapWindow(QMainWindow):
             f"&theme={self.theme}"
             f"&apikey={API_KEY}"
         )
-        if self.marker:
-            url += f"&pt={self.marker},pm2rdm"
+        if self.markers:
+            pts = "~".join([f"{m},pm2rdm" for m in self.markers])
+            url += f"&pt={pts}"
         return url
 
     def load_map(self):
         response = requests.get(self.build_map_url())
         if not response.ok:
             print("Ошибка карты:", response.status_code)
+            print(response.text)
             return
         pixmap = QPixmap()
         pixmap.loadFromData(response.content)
@@ -87,22 +88,20 @@ class MapWindow(QMainWindow):
             print(response.text)
             return
         data = response.json()
+
         try:
             pos = data["response"]["GeoObjectCollection"] \
                 ["featureMember"][0]["GeoObject"]["Point"]["pos"]
             lon, lat = pos.split()
             self.lon = float(lon)
             self.lat = float(lat)
-            self.marker = f"{lon},{lat}"
+            self.markers.append(f"{lon},{lat}")
             self.load_map()
         except (IndexError, KeyError):
             print("Объект не найден")
 
     def toggle_theme(self):
-        if self.theme == "light":
-            self.theme = "dark"
-        else:
-            self.theme = "light"
+        self.theme = "dark" if self.theme == "light" else "light"
         self.load_map()
 
     def keyPressEvent(self, event):
